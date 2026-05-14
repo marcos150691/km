@@ -1,0 +1,10 @@
+{
+  "name": "kilometros",
+  "description": "Aplicativo de rastreamento de quilometragem e manutenção para motocicletas.",
+  "requestFramePermissions": [
+    "geolocation"
+  ],
+  "majorCapabilities": [
+    "GPS Tracking"
+  ]
+}

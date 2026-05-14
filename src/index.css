@@ -1,0 +1,35 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Outfit:wght@400;600;700;900&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  --font-display: "Outfit", sans-serif;
+
+  --color-moto-primary: #CCFF00; /* Acid Green */
+  --color-moto-bg: #0F1115;
+  --color-moto-surface: #15181E;
+  --color-moto-border: #23272F;
+  --color-moto-text: #E0E2E6;
+  --color-moto-muted: #8E9299;
+}
+
+@layer base {
+  body {
+    @apply bg-moto-bg text-moto-text font-sans antialiased;
+  }
+
+  .mono-display {
+    @apply font-mono tracking-tighter;
+  }
+}
+
+@layer components {
+  .dashboard-card {
+    @apply bg-moto-surface border border-moto-border rounded-none p-8 flex flex-col justify-center;
+  }
+  
+  .status-label {
+    @apply text-moto-muted text-[10px] uppercase tracking-[0.2em] font-bold mb-1;
+  }
+}
