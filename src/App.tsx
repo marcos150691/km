@@ -41,27 +41,33 @@ export default function App() {
 
   const audioContextRef = React.useRef<AudioContext | null>(null);
 
-  const playAlertSound = () => {
+  const playAlertSound = (freq = 880, duration = 0.2) => {
     try {
       if (!audioContextRef.current) {
         audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
       }
       const ctx = audioContextRef.current;
+      
+      // Resume context if suspended (browser security)
+      if (ctx.state === 'suspended') {
+        ctx.resume();
+      }
+
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
 
       osc.type = 'sine';
-      osc.frequency.setValueAtTime(880, ctx.currentTime); // A5
-      osc.frequency.exponentialRampToValueAtTime(1760, ctx.currentTime + 0.1); // A6
+      osc.frequency.setValueAtTime(freq, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(freq * 1.5, ctx.currentTime + 0.05);
       
-      gain.gain.setValueAtTime(0.5, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5);
+      gain.gain.setValueAtTime(0.3, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + duration);
 
       osc.connect(gain);
       gain.connect(ctx.destination);
 
       osc.start();
-      osc.stop(ctx.currentTime + 0.5);
+      osc.stop(ctx.currentTime + duration);
     } catch (e) {
       console.error('Failed to play sound', e);
     }
@@ -142,15 +148,20 @@ export default function App() {
     if (activeTrip && activeTrip.status === 'active' && activeTrip.targetDistance) {
       if (activeTrip.distance >= activeTrip.targetDistance && !alertTriggered) {
         setAlertTriggered(true);
-        playAlertSound();
-        // Play twice or triple for emphasis
-        setTimeout(playAlertSound, 600);
-        setTimeout(playAlertSound, 1200);
+        // Play 3 distinct bips
+        playAlertSound(1000, 0.15); // Bip 1
+        setTimeout(() => playAlertSound(1000, 0.15), 300); // Bip 2
+        setTimeout(() => playAlertSound(1000, 0.15), 600); // Bip 3
       }
     }
   }, [activeTrip?.distance, activeTrip?.targetDistance, alertTriggered]);
 
   const startTrip = () => {
+    // Unlock audio on user interaction
+    if (audioContextRef.current?.state === 'suspended') {
+      audioContextRef.current.resume();
+    }
+    
     const target = parseFloat(targetKmInput);
     const newTrip: Trip = {
       id: crypto.randomUUID(),
