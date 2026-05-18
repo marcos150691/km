@@ -222,8 +222,8 @@ export default function App() {
     }
   };
 
-  const updateTotalKm = () => {
-    const val = prompt('Digite o valor atual do odômetro da moto:', state.totalKm.toString());
+  const updateOdoManual = () => {
+    const val = prompt('Digite o valor real do odômetro da sua moto (KM):', state.totalKm.toFixed(1));
     if (val !== null) {
       const num = parseFloat(val);
       if (!isNaN(num)) {
@@ -254,20 +254,44 @@ export default function App() {
     }
   };
 
+  // Calculations
+  const averageDuration = React.useMemo(() => {
+    const completedTrips = state.trips.filter(t => t.endTime && t.startTime);
+    if (completedTrips.length === 0) return 0;
+    const totalDuration = completedTrips.reduce((acc, t) => acc + (t.endTime! - t.startTime), 0);
+    return Math.round((totalDuration / completedTrips.length) / 60000); // return in minutes
+  }, [state.trips]);
+
+  const monthlyKm = React.useMemo(() => {
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+    return state.trips
+      .filter(t => t.startTime >= startOfMonth)
+      .reduce((acc, t) => acc + t.distance, 0);
+  }, [state.trips]);
+
   return (
     <div className="min-h-screen bg-moto-bg flex flex-col font-sans overflow-x-hidden">
       {/* Top Header / Status Bar */}
       <header className="flex items-center justify-between px-8 py-6 border-b border-moto-border bg-moto-bg/50 backdrop-blur-md sticky top-0 z-50">
-          <div className="flex items-center space-x-3">
-            <div className={cn(
-              "w-3 h-3 rounded-full transition-shadow duration-500",
-              trackingError ? "bg-red-500 shadow-[0_0_8px_#ef4444]" : 
-              (activeTrip && activeTrip.points.length > 0) ? "bg-moto-primary shadow-[0_0_8px_#CCFF00]" : "bg-yellow-500 shadow-[0_0_8px_#f59e0b]"
-            )}></div>
-            <span className="font-mono text-[10px] tracking-widest uppercase text-moto-muted">
-              {trackingError ? 'GPS Signal: Weak' : 
-               (activeTrip && activeTrip.points.length === 0) ? 'GPS: Searching...' : 'GPS Signal: Strong'}
-            </span>
+          <div className="flex items-center space-x-4">
+            <div className="bg-moto-primary p-2 rounded-sm hidden sm:block">
+              <Bike className="w-5 h-5 text-black" />
+            </div>
+            <div className="flex flex-col">
+              <div className="flex items-center space-x-2">
+                <div className={cn(
+                  "w-2 h-2 rounded-full transition-shadow duration-500",
+                  trackingError ? "bg-red-500 shadow-[0_0_8px_#ef4444]" : 
+                  (activeTrip && activeTrip.points.length > 0) ? "bg-moto-primary shadow-[0_0_8px_#CCFF00]" : "bg-yellow-500 shadow-[0_0_8px_#f59e0b]"
+                )}></div>
+                <span className="font-mono text-[10px] tracking-widest uppercase text-moto-muted">
+                  {trackingError ? 'GPS: Sinal Fraco' : 
+                   (activeTrip && activeTrip.points.length === 0 && activeTrip.status === 'active') ? 'GPS: Buscando...' : 'GPS: Sinal OK'}
+                </span>
+              </div>
+              <h1 className="text-xs font-black uppercase tracking-[0.3em] text-white">Kilometros</h1>
+            </div>
           </div>
           
           <div className="flex items-center gap-6">
@@ -294,12 +318,13 @@ export default function App() {
           </div>
           
           <div className="flex items-baseline space-x-4">
+            <Bike className="w-8 h-8 md:w-12 md:h-12 text-moto-primary animate-pulse" />
             <span className="text-7xl md:text-[140px] font-bold tracking-tighter leading-none mono-display">
               {(state.totalKm + (activeTrip?.distance || 0)).toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
             </span>
             <span className="text-xl md:text-4xl font-light text-moto-muted">KM</span>
             <button 
-              onClick={updateTotalKm}
+              onClick={updateOdoManual}
               className="ml-4 p-2 text-moto-muted hover:text-moto-primary transition-colors"
             >
               <Wrench className="w-4 h-4 md:w-6 md:h-6" />
@@ -367,10 +392,10 @@ export default function App() {
         {/* Side Stats Panel */}
         <aside className="md:col-span-4 flex flex-col gap-1 md:gap-1">
           <div className="bg-moto-surface p-8 flex flex-col justify-center min-h-[140px]">
-            <p className="status-label">Estimativa Mês</p>
+            <p className="status-label">Este Mês</p>
             <div className="flex items-baseline space-x-2">
               <span className="text-5xl md:text-6xl font-bold italic">
-                {state.trips.reduce((acc, t) => acc + t.distance, 0).toFixed(0)}
+                {monthlyKm.toFixed(0)}
               </span>
               <span className="text-lg font-medium opacity-50">KM</span>
             </div>
@@ -383,8 +408,8 @@ export default function App() {
                 <p className="text-2xl font-mono">{state.trips.length}</p>
               </div>
               <div>
-                <p className="status-label">Duração Avg</p>
-                <p className="text-2xl font-mono">--<span className="text-xs ml-1 font-sans">M</span></p>
+                <p className="status-label">Média Duração</p>
+                <p className="text-2xl font-mono">{averageDuration}<span className="text-xs ml-1 font-sans">min</span></p>
               </div>
             </div>
           </div>
@@ -420,22 +445,30 @@ export default function App() {
               className="space-y-4"
             >
               <div className="flex items-center justify-between mb-4 border-b border-moto-border pb-4">
-                <h3 className="font-mono text-sm tracking-[0.3em] uppercase text-moto-muted">Log History</h3>
+                <h3 className="font-mono text-sm tracking-[0.3em] uppercase text-moto-muted">Histórico de Viagens</h3>
                 <button onClick={addManualTrip} className="text-[10px] uppercase font-bold text-moto-primary border border-moto-primary/30 px-3 py-1 hover:bg-moto-primary hover:text-black">Add Manual</button>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
-                {state.trips.map(trip => (
-                  <div key={trip.id} className="bg-moto-surface border border-moto-border p-6 flex justify-between items-center group">
-                    <div>
-                      <p className="font-mono text-2xl font-bold leading-none">{trip.distance.toFixed(1)} <span className="text-[10px] font-sans text-moto-primary">KM</span></p>
-                      <p className="text-[10px] text-moto-muted mt-2 font-medium tracking-widest">{format(trip.startTime, 'MMM dd, yyyy · HH:mm')}</p>
+              
+              {state.trips.length === 0 ? (
+                <div className="bg-moto-surface/50 border border-moto-border border-dashed p-12 text-center">
+                  <History className="w-8 h-8 text-moto-muted mx-auto mb-4 opacity-20" />
+                  <p className="font-mono text-xs text-moto-muted uppercase tracking-widest">Nenhuma viagem registrada</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                  {state.trips.map(trip => (
+                    <div key={trip.id} className="bg-moto-surface border border-moto-border p-6 flex justify-between items-center group">
+                      <div>
+                        <p className="font-mono text-2xl font-bold leading-none">{trip.distance.toFixed(1)} <span className="text-[10px] font-sans text-moto-primary">KM</span></p>
+                        <p className="text-[10px] text-moto-muted mt-2 font-medium tracking-widest">{format(trip.startTime, 'MMM dd, yyyy · HH:mm')}</p>
+                      </div>
+                      <button onClick={() => deleteTrip(trip.id)} className="text-moto-muted hover:text-red-500 p-2 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                     </div>
-                    <button onClick={() => deleteTrip(trip.id)} className="text-moto-muted hover:text-red-500 p-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </motion.div>
           )}
 
@@ -447,146 +480,164 @@ export default function App() {
               className="space-y-4"
             >
               <div className="flex items-center justify-between mb-4 border-b border-moto-border pb-4">
-                <h3 className="font-mono text-sm tracking-[0.3em] uppercase text-moto-muted">Maintenance Fleet Log</h3>
+                <h3 className="font-mono text-sm tracking-[0.3em] uppercase text-moto-muted">Manutenção da Frota</h3>
                 <button 
                   onClick={() => {
-                    const type = prompt('Tipo de manutenção (óleo, pneu, corrente, freio):') as any;
-                    if (type) addMaintenance(type);
+                    const input = prompt('Tipo de manutenção (ex: Óleo, Pneu, Corrente, Freio):');
+                    if (input) {
+                      const norm = input.toLowerCase();
+                      let type: MaintenanceRecord['type'] = 'general';
+                      if (norm.includes('oleo') || norm.includes('óleo')) type = 'oil';
+                      else if (norm.includes('pneu')) type = 'tires';
+                      else if (norm.includes('corrente')) type = 'chain';
+                      else if (norm.includes('freio')) type = 'brake';
+                      addMaintenance(type, input);
+                    }
                   }}
                   className="text-[10px] uppercase font-bold text-moto-primary border border-moto-primary/30 px-3 py-1 hover:bg-moto-primary hover:text-black"
-                >Record Service</button>
+                >Registrar Serviço</button>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                {state.maintenance.map(record => (
-                  <div key={record.id} className="bg-moto-surface border border-moto-border p-6 flex justify-between items-center">
-                    <div>
-                      <div className="flex items-center gap-2 mb-1">
-                        <Wrench className="w-3 h-3 text-moto-primary" />
-                        <p className="font-mono text-sm uppercase tracking-widest font-bold">{record.type}</p>
+
+              {state.maintenance.length === 0 ? (
+                <div className="bg-moto-surface/50 border border-moto-border border-dashed p-12 text-center">
+                  <Wrench className="w-8 h-8 text-moto-muted mx-auto mb-4 opacity-20" />
+                  <p className="font-mono text-xs text-moto-muted uppercase tracking-widest">Nenhuma manutenção registrada</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                  {state.maintenance.map(record => (
+                    <div key={record.id} className="bg-moto-surface border border-moto-border p-6 flex justify-between items-center">
+                      <div>
+                        <div className="flex items-center gap-2 mb-1">
+                          <Wrench className="w-3 h-3 text-moto-primary" />
+                          <p className="font-mono text-sm uppercase tracking-widest font-bold">
+                            {record.notes || record.type}
+                          </p>
+                        </div>
+                        <p className="text-[10px] text-moto-muted font-medium tracking-widest">{format(record.date, 'MMM dd, yyyy')}</p>
                       </div>
-                      <p className="text-[10px] text-moto-muted font-medium tracking-widest">{format(record.date, 'MMM dd, yyyy')}</p>
+                      <p className="font-mono text-xl">{record.kilometers.toFixed(0)} <span className="text-[10px] font-sans text-moto-muted">KM</span></p>
                     </div>
-                    <p className="font-mono text-xl">{record.kilometers.toFixed(0)} <span className="text-[10px] font-sans text-moto-muted">KM</span></p>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </motion.div>
           )}
         </AnimatePresence>
       </section>
 
       {/* Global Footer Controls */}
-      <footer className="h-24 md:h-24 bg-moto-bg border-t border-moto-border flex items-center justify-between px-6 md:px-10 fixed bottom-0 left-0 right-0 z-50">
-        <div className="flex items-center gap-2 md:space-x-6">
-          <button 
-            onClick={() => setView(view === 'history' ? 'dashboard' : 'history')}
-            className={cn(
-              "px-4 md:px-6 py-2 border text-[9px] md:text-[11px] uppercase tracking-[0.2em] transition-all font-bold",
-              view === 'history' ? "bg-white text-black border-white" : "border-moto-border text-moto-muted hover:bg-white hover:text-black"
-            )}
-          >
-            History
-          </button>
-          <button 
-            onClick={() => setView(view === 'maintenance' ? 'dashboard' : 'maintenance')}
-            className={cn(
-              "px-4 md:px-6 py-2 border text-[9px] md:text-[11px] uppercase tracking-[0.2em] transition-all font-bold",
-              view === 'maintenance' ? "bg-white text-black border-white" : "border-moto-border text-moto-muted hover:bg-white hover:text-black"
-            )}
-          >
-            Service
-          </button>
+      <footer className="h-auto min-h-[100px] md:h-28 bg-moto-bg border-t border-moto-border flex flex-col sm:flex-row items-center justify-between px-4 md:px-10 fixed bottom-0 left-0 right-0 z-50 py-4 sm:py-0">
+        <div className="flex items-center gap-2 md:space-x-6 w-full sm:w-auto justify-between sm:justify-start mb-4 sm:mb-0">
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={() => setView(view === 'history' ? 'dashboard' : 'history')}
+              className={cn(
+                "px-3 md:px-6 py-2 border text-[9px] md:text-[11px] uppercase tracking-[0.2em] transition-all font-bold",
+                view === 'history' ? "bg-white text-black border-white" : "border-moto-border text-moto-muted hover:bg-white hover:text-black"
+              )}
+            >
+              Histórico
+            </button>
+            <button 
+              onClick={() => setView(view === 'maintenance' ? 'dashboard' : 'maintenance')}
+              className={cn(
+                "px-3 md:px-6 py-2 border text-[9px] md:text-[11px] uppercase tracking-[0.2em] transition-all font-bold",
+                view === 'maintenance' ? "bg-white text-black border-white" : "border-moto-border text-moto-muted hover:bg-white hover:text-black"
+              )}
+            >
+              Oficina
+            </button>
+          </div>
           <button 
              onClick={resetOdo}
-             className="p-2 text-moto-muted hover:text-red-500 hidden md:block"
+             className="p-2 text-moto-muted hover:text-red-500"
           >
             <RotateCcw className="w-4 h-4" />
           </button>
         </div>
 
-        <div className="flex items-center space-x-4 md:space-x-8">
-          <div className="flex flex-col items-end hidden sm:flex">
-            <span className="text-[10px] uppercase text-moto-muted tracking-widest font-bold">App Status</span>
-            <span className="font-mono text-xs">{activeTrip ? 'Tracking Active' : 'Dashboard Idle'}</span>
+        <div className="flex items-center space-x-4 md:space-x-8 w-full sm:w-auto justify-between sm:justify-end">
+          <div className="flex flex-col items-end hidden lg:flex">
+            <span className="text-[10px] uppercase text-moto-muted tracking-widest font-bold">Status</span>
+            <span className="font-mono text-xs">{activeTrip ? 'Rastreando' : 'Pronto'}</span>
           </div>
           
           {!activeTrip ? (
-            <div className="flex flex-col gap-3">
-              <div className="flex items-center justify-end gap-1">
+            <div className="flex flex-col gap-2 w-full sm:w-auto">
+              {/* Presets - Scrollable on very small screens */}
+              <div className="flex items-center justify-end gap-1 overflow-x-auto no-scrollbar">
                 {[5, 10, 20, 50, 100].map(val => (
                   <button 
                     key={val}
                     type="button"
                     onClick={() => setTargetKmInput(val.toString())}
                     className={cn(
-                      "px-2 py-1 text-[9px] font-mono border transition-all duration-200 uppercase tracking-tighter",
+                      "flex-shrink-0 px-2 py-1 text-[8px] md:text-[9px] font-mono border transition-all duration-200 uppercase tracking-tighter",
                       targetKmInput === val.toString() 
-                        ? "bg-moto-primary text-black border-moto-primary font-bold shadow-[0_0_10px_#CCFF0033]" 
-                        : "border-moto-border text-moto-muted hover:border-moto-primary/50"
+                        ? "bg-moto-primary text-black border-moto-primary font-bold" 
+                        : "border-moto-border text-moto-muted"
                     )}
                   >
-                    {val}km
+                    {val}k
                   </button>
                 ))}
                 <button 
                   type="button"
                   onClick={() => setTargetKmInput('')}
                   className={cn(
-                    "px-2 py-1 text-[9px] font-mono border border-moto-border text-moto-muted hover:border-red-500 transition-colors uppercase tracking-tighter",
+                    "flex-shrink-0 px-2 py-1 text-[8px] md:text-[9px] font-mono border border-moto-border text-moto-muted uppercase tracking-tighter",
                     targetKmInput === '' && "opacity-50"
                   )}
                 >
-                  no limit
+                  off
                 </button>
               </div>
               
-              <div className="flex items-center gap-3">
-                <div className="flex flex-col items-end">
-                  <span className="text-[9px] uppercase text-moto-muted tracking-widest font-bold">Definir Meta Manual</span>
+              <div className="flex items-center gap-2 justify-end">
+                <div className="flex flex-col items-end shrink-0">
                   <div className="relative">
                     <input 
                       type="number"
-                      placeholder="KM"
+                      placeholder="Meta"
                       value={targetKmInput}
                       onChange={(e) => setTargetKmInput(e.target.value)}
-                      className="bg-moto-surface border border-moto-border text-sm w-28 px-3 py-2 font-mono focus:outline-none focus:border-moto-primary transition-all text-right pr-8"
+                      className="bg-moto-surface border border-moto-border text-xs w-20 md:w-28 px-2 py-2 font-mono focus:outline-none focus:border-moto-primary transition-all text-right pr-6"
                     />
-                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-moto-muted font-mono">KM</span>
+                    <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[8px] text-moto-muted font-mono uppercase">km</span>
                   </div>
                 </div>
                 <button 
                   onClick={startTrip}
-                  className="h-12 md:h-14 px-8 md:px-16 bg-moto-primary text-black font-black uppercase tracking-[0.2em] text-xs md:text-sm hover:opacity-90 active:scale-95 transition-all shadow-[0_0_30px_rgba(204,255,0,0.4)] flex items-center gap-3"
+                  className="h-10 md:h-12 px-4 md:px-10 bg-moto-primary text-black font-black uppercase tracking-[0.1em] md:tracking-[0.2em] text-[10px] md:text-xs hover:opacity-90 active:scale-95 transition-all shadow-[0_0_20px_rgba(204,255,0,0.3)] flex items-center gap-2 whitespace-nowrap"
                 >
-                  <Play className="w-5 h-5 fill-black" />
-                  <span className="hidden xs:inline">Iniciar Viagem</span>
-                  <span className="xs:hidden">Start</span>
+                  <Play className="w-4 h-4 fill-black" />
+                  <span>Iniciar</span>
                 </button>
               </div>
             </div>
           ) : (
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-4 w-full sm:w-auto justify-end">
               {activeTrip.targetDistance && (
-                <div className="hidden sm:flex flex-col items-end">
-                  <span className="text-[9px] uppercase text-moto-muted tracking-widest font-bold">Progresso</span>
+                <div className="flex flex-col items-end">
+                  <span className="text-[9px] uppercase text-moto-primary tracking-widest font-bold">Progresso</span>
                   <div className="flex items-baseline gap-1">
                     <span className={cn(
-                      "font-mono text-xs",
-                      alertTriggered ? "text-moto-primary animate-pulse" : "text-white"
+                      "font-mono text-xs md:text-sm",
+                      alertTriggered ? "text-red-500 animate-pulse" : "text-white"
                     )}>
                       {((activeTrip.distance / activeTrip.targetDistance) * 100).toFixed(0)}%
                     </span>
-                    <span className="text-[9px] text-moto-muted">/ {activeTrip.targetDistance}KM</span>
+                    <span className="text-[9px] text-moto-muted">/ {activeTrip.targetDistance}km</span>
                   </div>
                 </div>
               )}
               <button 
                 onClick={stopTrip}
-                className="h-12 md:h-14 px-6 md:px-12 bg-red-500 text-white font-black uppercase tracking-[0.2em] text-xs md:text-sm hover:opacity-90 active:scale-95 transition-all shadow-[0_0_20px_rgba(239,68,68,0.3)] flex items-center gap-2"
+                className="h-10 md:h-12 px-6 md:px-12 bg-red-500 text-white font-black uppercase tracking-[0.2em] text-[10px] md:text-sm hover:opacity-90 active:scale-95 transition-all shadow-[0_0_20px_rgba(239,68,68,0.3)] flex items-center gap-2"
               >
                 <Square className="w-4 h-4 fill-white" />
-                <span className="hidden xs:inline">Stop Ride</span>
-                <span className="xs:hidden">Stop</span>
+                <span>Parar</span>
               </button>
             </div>
           )}
@@ -594,7 +645,7 @@ export default function App() {
       </footer>
       
       {/* Spacer for fixed footer */}
-      <div className="h-24 sm:h-24"></div>
+      <div className="h-32 sm:h-32"></div>
     </div>
   );
 }
