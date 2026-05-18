@@ -102,16 +102,23 @@ export default function App() {
               if (!prev) return null;
               
               const lastPoint = prev.points[prev.points.length - 1];
-              let addedDistance = 0;
-
-              if (lastPoint) {
-                addedDistance = calculateDistance(lastPoint.lat, lastPoint.lng, lat, lng);
-                if (addedDistance < 0.005) addedDistance = 0;
+              
+              if (!lastPoint) {
+                return {
+                  ...prev,
+                  points: [{ lat, lng, timestamp: now }]
+                };
               }
+
+              const dist = calculateDistance(lastPoint.lat, lastPoint.lng, lat, lng);
+              // Only update if moved more than 2 meters to avoid jitter but still accumulate
+              // We return prev without adding the point if it's too close, 
+              // so the next update compares with the same lastPoint.
+              if (dist < 0.002) return prev;
 
               return {
                 ...prev,
-                distance: prev.distance + addedDistance,
+                distance: prev.distance + dist,
                 points: [...prev.points, { lat, lng, timestamp: now }]
               };
             });
@@ -240,23 +247,25 @@ export default function App() {
     <div className="min-h-screen bg-moto-bg flex flex-col font-sans overflow-x-hidden">
       {/* Top Header / Status Bar */}
       <header className="flex items-center justify-between px-8 py-6 border-b border-moto-border bg-moto-bg/50 backdrop-blur-md sticky top-0 z-50">
-        <div className="flex items-center space-x-3">
-          <div className={cn(
-            "w-3 h-3 rounded-full transition-shadow duration-500",
-            trackingError ? "bg-red-500 shadow-[0_0_8px_#ef4444]" : "bg-moto-primary shadow-[0_0_8px_#CCFF00]"
-          )}></div>
-          <span className="font-mono text-[10px] tracking-widest uppercase text-moto-muted">
-            {trackingError ? 'GPS Signal: Weak' : 'GPS Signal: Strong'}
-          </span>
-        </div>
-        
-        <div className="flex items-center gap-6">
-           <div className="flex flex-col items-end">
-            <span className="text-[10px] text-moto-muted uppercase tracking-tighter leading-none mb-1">Total Odo</span>
-            <span className="font-mono text-sm uppercase text-moto-primary font-bold">
-              {Math.floor(state.totalKm).toString()} KM
+          <div className="flex items-center space-x-3">
+            <div className={cn(
+              "w-3 h-3 rounded-full transition-shadow duration-500",
+              trackingError ? "bg-red-500 shadow-[0_0_8px_#ef4444]" : 
+              (activeTrip && activeTrip.points.length > 0) ? "bg-moto-primary shadow-[0_0_8px_#CCFF00]" : "bg-yellow-500 shadow-[0_0_8px_#f59e0b]"
+            )}></div>
+            <span className="font-mono text-[10px] tracking-widest uppercase text-moto-muted">
+              {trackingError ? 'GPS Signal: Weak' : 
+               (activeTrip && activeTrip.points.length === 0) ? 'GPS: Searching...' : 'GPS Signal: Strong'}
             </span>
           </div>
+          
+          <div className="flex items-center gap-6">
+             <div className="flex flex-col items-end">
+              <span className="text-[10px] text-moto-muted uppercase tracking-tighter leading-none mb-1">Total Odo</span>
+              <span className="font-mono text-sm uppercase text-moto-primary font-bold">
+                {(state.totalKm + (activeTrip?.distance || 0)).toFixed(1)} KM
+              </span>
+            </div>
           <div className="flex flex-col items-end">
             <span className="text-[10px] text-moto-muted uppercase tracking-tighter leading-none mb-1">
               {format(Date.now(), 'HH:mm')} 
@@ -275,7 +284,7 @@ export default function App() {
           
           <div className="flex items-baseline space-x-4">
             <span className="text-7xl md:text-[140px] font-bold tracking-tighter leading-none mono-display">
-              {Math.floor(state.totalKm).toLocaleString()}
+              {(state.totalKm + (activeTrip?.distance || 0)).toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
             </span>
             <span className="text-xl md:text-4xl font-light text-moto-muted">KM</span>
             <button 
@@ -286,7 +295,7 @@ export default function App() {
             </button>
           </div>
 
-          <div className="mt-8 md:mt-12 grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-12 border-t border-moto-border pt-8 md:pt-12">
+          <div className="mt-8 md:mt-12 grid grid-cols-1 md:grid-cols-3 gap-8 md:gap-12 border-t border-moto-border pt-8 md:pt-12">
             <div>
               <p className="text-moto-muted text-[10px] uppercase tracking-widest mb-2 font-bold">Esta Viagem (Trip A)</p>
               <div className="flex items-baseline space-x-2">
@@ -294,18 +303,51 @@ export default function App() {
                   "text-4xl md:text-5xl font-mono font-medium",
                   activeTrip ? "text-moto-primary" : "text-moto-muted"
                 )}>
-                  {(activeTrip?.distance || 0).toFixed(1)}
+                  {formatDistance(activeTrip?.distance || 0).split(' ')[0]}
                 </span>
-                <span className="text-sm md:text-lg text-moto-muted">KM</span>
+                <span className="text-sm md:text-lg text-moto-muted">
+                  {formatDistance(activeTrip?.distance || 0).split(' ')[1] || 'KM'}
+                </span>
               </div>
             </div>
+
+            {activeTrip?.targetDistance && (
+              <div className="relative group">
+                <p className="text-moto-primary text-[10px] uppercase tracking-widest mb-2 font-bold flex items-center gap-2">
+                  <Navigation className="w-3 h-3" />
+                  Meta Ativa
+                </p>
+                <div className="flex items-baseline space-x-2">
+                  <span className="text-4xl md:text-5xl font-mono font-bold text-white">
+                    {((activeTrip.distance / activeTrip.targetDistance) * 100).toFixed(0)}
+                  </span>
+                  <span className="text-sm md:text-lg text-moto-primary font-bold">%</span>
+                </div>
+                <div className="mt-2 w-full h-1.5 bg-moto-surface border border-moto-border overflow-hidden">
+                  <motion.div 
+                    initial={{ width: 0 }}
+                    animate={{ width: `${Math.min(100, (activeTrip.distance / activeTrip.targetDistance) * 100)}%` }}
+                    className={cn(
+                      "h-full transition-all duration-500",
+                      alertTriggered ? "bg-red-500 shadow-[0_0_15px_#ef4444]" : "bg-moto-primary shadow-[0_0_10px_#CCFF00]"
+                    )}
+                  />
+                </div>
+                <p className="mt-1 text-[10px] font-mono text-moto-muted font-bold">
+                  {activeTrip.distance.toFixed(1)} / {activeTrip.targetDistance} KM
+                </p>
+              </div>
+            )}
+
             <div>
               <p className="text-moto-muted text-[10px] uppercase tracking-widest mb-2 font-bold">Última Viagem</p>
               <div className="flex items-baseline space-x-2">
                 <span className="text-4xl md:text-5xl font-mono font-medium">
-                  {(state.trips[0]?.distance || 0).toFixed(1)}
+                  {formatDistance(state.trips[0]?.distance || 0).split(' ')[0]}
                 </span>
-                <span className="text-sm md:text-lg text-moto-muted">KM</span>
+                <span className="text-sm md:text-lg text-moto-muted">
+                  {formatDistance(state.trips[0]?.distance || 0).split(' ')[1] || 'KM'}
+                </span>
               </div>
             </div>
           </div>
@@ -458,25 +500,58 @@ export default function App() {
           </div>
           
           {!activeTrip ? (
-            <div className="flex items-center gap-2">
-              <div className="flex flex-col items-end">
-                <span className="text-[9px] uppercase text-moto-muted tracking-widest font-bold">Meta (KM)</span>
-                <input 
-                  type="number"
-                  placeholder="Opcional"
-                  value={targetKmInput}
-                  onChange={(e) => setTargetKmInput(e.target.value)}
-                  className="bg-moto-surface border border-moto-border text-xs w-20 px-2 py-1 font-mono focus:outline-none focus:border-moto-primary transition-colors text-right"
-                />
+            <div className="flex flex-col gap-3">
+              <div className="flex items-center justify-end gap-1">
+                {[5, 10, 20, 50, 100].map(val => (
+                  <button 
+                    key={val}
+                    type="button"
+                    onClick={() => setTargetKmInput(val.toString())}
+                    className={cn(
+                      "px-2 py-1 text-[9px] font-mono border transition-all duration-200 uppercase tracking-tighter",
+                      targetKmInput === val.toString() 
+                        ? "bg-moto-primary text-black border-moto-primary font-bold shadow-[0_0_10px_#CCFF0033]" 
+                        : "border-moto-border text-moto-muted hover:border-moto-primary/50"
+                    )}
+                  >
+                    {val}km
+                  </button>
+                ))}
+                <button 
+                  type="button"
+                  onClick={() => setTargetKmInput('')}
+                  className={cn(
+                    "px-2 py-1 text-[9px] font-mono border border-moto-border text-moto-muted hover:border-red-500 transition-colors uppercase tracking-tighter",
+                    targetKmInput === '' && "opacity-50"
+                  )}
+                >
+                  no limit
+                </button>
               </div>
-              <button 
-                onClick={startTrip}
-                className="h-12 md:h-14 px-6 md:px-12 bg-moto-primary text-black font-black uppercase tracking-[0.2em] text-xs md:text-sm hover:opacity-90 active:scale-95 transition-all shadow-[0_0_20px_rgba(204,255,0,0.3)] flex items-center gap-2"
-              >
-                <Play className="w-4 h-4 fill-black" />
-                <span className="hidden xs:inline">Start Ride</span>
-                <span className="xs:hidden">Start</span>
-              </button>
+              
+              <div className="flex items-center gap-3">
+                <div className="flex flex-col items-end">
+                  <span className="text-[9px] uppercase text-moto-muted tracking-widest font-bold">Definir Meta Manual</span>
+                  <div className="relative">
+                    <input 
+                      type="number"
+                      placeholder="KM"
+                      value={targetKmInput}
+                      onChange={(e) => setTargetKmInput(e.target.value)}
+                      className="bg-moto-surface border border-moto-border text-sm w-28 px-3 py-2 font-mono focus:outline-none focus:border-moto-primary transition-all text-right pr-8"
+                    />
+                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-moto-muted font-mono">KM</span>
+                  </div>
+                </div>
+                <button 
+                  onClick={startTrip}
+                  className="h-12 md:h-14 px-8 md:px-16 bg-moto-primary text-black font-black uppercase tracking-[0.2em] text-xs md:text-sm hover:opacity-90 active:scale-95 transition-all shadow-[0_0_30px_rgba(204,255,0,0.4)] flex items-center gap-3"
+                >
+                  <Play className="w-5 h-5 fill-black" />
+                  <span className="hidden xs:inline">Iniciar Viagem</span>
+                  <span className="xs:hidden">Start</span>
+                </button>
+              </div>
             </div>
           ) : (
             <div className="flex items-center gap-4">
